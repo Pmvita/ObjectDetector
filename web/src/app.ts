@@ -1,13 +1,20 @@
 import { ObjectDetector } from './detector';
+import { FaceDetector } from './faceDetector';
+import { FaceAnalyzer } from './faceAnalyzer';
 import { CanvasRenderer } from './canvas';
-import type { Detection, Stats } from './types';
+import type { Detection, Stats, FaceDetection } from './types';
+
+type DetectionMode = 'object' | 'face';
 
 class ObjectDetectionApp {
   private video: HTMLVideoElement;
   private canvas: HTMLCanvasElement;
   private detector: ObjectDetector;
+  private faceDetector: FaceDetector;
+  private faceAnalyzer: FaceAnalyzer;
   private renderer: CanvasRenderer;
   private isDetecting: boolean = false;
+  private detectionMode: DetectionMode = 'object';
   private animationFrameId: number | null = null;
   private stats: Stats = {
     fps: 0,
@@ -15,12 +22,16 @@ class ObjectDetectionApp {
     uniqueClasses: 0,
     detectedObjects: []
   };
+  private faceDetections: FaceDetection[] = [];
+  private analyzeFrameCount: number = 0;
+  private readonly analyzeInterval: number = 5; // Analyze every 5th frame
 
   // UI Elements
   private statusEl: HTMLElement;
   private startBtn: HTMLButtonElement;
   private stopBtn: HTMLButtonElement;
   private screenshotBtn: HTMLButtonElement;
+  private modeToggleBtn: HTMLButtonElement;
   private fpsEl: HTMLElement;
   private objectCountEl: HTMLElement;
   private uniqueClassesEl: HTMLElement;
@@ -38,12 +49,15 @@ class ObjectDetectionApp {
     this.startBtn = document.getElementById('startBtn') as HTMLButtonElement;
     this.stopBtn = document.getElementById('stopBtn') as HTMLButtonElement;
     this.screenshotBtn = document.getElementById('screenshotBtn') as HTMLButtonElement;
+    this.modeToggleBtn = document.getElementById('modeToggleBtn') as HTMLButtonElement;
     this.fpsEl = document.getElementById('fps') as HTMLElement;
     this.objectCountEl = document.getElementById('objectCount') as HTMLElement;
     this.uniqueClassesEl = document.getElementById('uniqueClasses') as HTMLElement;
     this.objectsListEl = document.getElementById('objectsList') as HTMLElement;
 
     this.detector = new ObjectDetector();
+    this.faceDetector = new FaceDetector();
+    this.faceAnalyzer = new FaceAnalyzer();
     this.renderer = new CanvasRenderer(this.canvas, 0.5);
 
     this.setupEventListeners();
@@ -54,20 +68,26 @@ class ObjectDetectionApp {
     this.startBtn.addEventListener('click', () => this.startDetection());
     this.stopBtn.addEventListener('click', () => this.stopDetection());
     this.screenshotBtn.addEventListener('click', () => this.takeScreenshot());
+    this.modeToggleBtn.addEventListener('click', () => this.toggleMode());
   }
 
   private async initialize(): Promise<void> {
     try {
-      this.updateStatus('loading', 'Loading model...');
+      this.updateStatus('loading', 'Loading models...');
       
-      // Load the detection model
-      await this.detector.load();
+      // Load both detection models
+      await Promise.all([
+        this.detector.load(),
+        this.faceDetector.load(),
+        this.faceAnalyzer.load()
+      ]);
       
       // Request camera access
       await this.setupCamera();
       
       this.updateStatus('ready', 'Starting detection...');
       this.startBtn.disabled = false;
+      this.modeToggleBtn.disabled = false;
       
       // Auto-start detection
       this.startDetection();
@@ -79,11 +99,12 @@ class ObjectDetectionApp {
 
   private async setupCamera(): Promise<void> {
     try {
+      // Request access to default webcam
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {
           width: { ideal: 1280 },
           height: { ideal: 720 },
-          facingMode: 'user'
+          facingMode: 'user'  // Use front-facing webcam by default
         }
       });
 
@@ -109,7 +130,10 @@ class ObjectDetectionApp {
     this.startBtn.disabled = true;
     this.stopBtn.disabled = false;
     this.screenshotBtn.disabled = false;
-    this.updateStatus('ready', 'Detecting objects...');
+    this.modeToggleBtn.disabled = false;
+    
+    const modeText = this.detectionMode === 'object' ? 'objects' : 'faces';
+    this.updateStatus('ready', `Detecting ${modeText}...`);
     
     this.lastFrameTime = performance.now();
     this.detectLoop();
@@ -122,6 +146,7 @@ class ObjectDetectionApp {
     this.startBtn.disabled = false;
     this.stopBtn.disabled = true;
     this.screenshotBtn.disabled = true;
+    this.modeToggleBtn.disabled = false;
     this.updateStatus('ready', 'Detection stopped.');
     
     if (this.animationFrameId !== null) {
@@ -131,6 +156,18 @@ class ObjectDetectionApp {
     
     this.renderer.clear();
     this.updateStatsDisplay();
+  }
+
+  private toggleMode(): void {
+    if (this.isDetecting) {
+      // Can't toggle while detecting
+      return;
+    }
+    
+    this.detectionMode = this.detectionMode === 'object' ? 'face' : 'object';
+    const modeText = this.detectionMode === 'object' ? 'Object Detection' : 'Face Detection';
+    this.modeToggleBtn.textContent = `Switch to ${this.detectionMode === 'object' ? 'Face' : 'Object'} Mode`;
+    this.updateStatus('ready', `Mode: ${modeText}`);
   }
 
   private async detectLoop(): Promise<void> {
@@ -152,20 +189,51 @@ class ObjectDetectionApp {
     }
 
     try {
-      // Perform detection
-      const result = await this.detector.detect(this.video);
-      
-      // Update stats
-      this.stats.detectedObjects = result.detections;
-      this.stats.objectCount = result.detections.length;
-      this.stats.uniqueClasses = new Set(result.detections.map(d => d.class)).size;
+      if (this.detectionMode === 'object') {
+        // Object detection mode
+        const result = await this.detector.detect(this.video);
+        
+        // Update stats
+        this.stats.detectedObjects = result.detections;
+        this.stats.objectCount = result.detections.length;
+        this.stats.uniqueClasses = new Set(result.detections.map(d => d.class)).size;
 
-      // Render detections
-      this.renderer.drawDetections(result.detections);
-      
-      // Update UI
-      this.updateStatsDisplay();
-      this.updateObjectsList(result.detections);
+        // Render detections
+        this.renderer.drawDetections(result.detections);
+        
+        // Update UI
+        this.updateStatsDisplay();
+        this.updateObjectsList(result.detections);
+      } else {
+        // Face detection mode
+        const faceResult = await this.faceDetector.detect(this.video);
+        
+        // Analyze faces every Nth frame
+        if (this.analyzeFrameCount % this.analyzeInterval === 0) {
+          for (let i = 0; i < faceResult.faces.length; i++) {
+            const face = faceResult.faces[i];
+            const analysis = await this.faceAnalyzer.analyze(this.video, face.bbox);
+            if (analysis) {
+              face.analysis = analysis;
+            }
+          }
+        }
+        this.analyzeFrameCount++;
+        
+        // Update stored detections
+        this.faceDetections = faceResult.faces;
+        
+        // Update stats
+        this.stats.objectCount = faceResult.faces.length;
+        this.stats.uniqueClasses = faceResult.faces.length; // Number of faces
+        
+        // Render face detections
+        this.renderer.drawFaceDetections(faceResult.faces);
+        
+        // Update UI
+        this.updateStatsDisplay();
+        this.updateFacesList(faceResult.faces);
+      }
     } catch (error) {
       console.error('Detection error:', error);
     }
@@ -209,14 +277,55 @@ class ObjectDetectionApp {
     this.objectsListEl.innerHTML = html || '<p style="color: #999; padding: 10px;">No objects detected</p>';
   }
 
+  private updateFacesList(faces: FaceDetection[]): void {
+    if (faces.length === 0) {
+      this.objectsListEl.innerHTML = '<p style="color: #999; padding: 10px;">No faces detected</p>';
+      return;
+    }
+
+    // Build HTML for faces
+    let html = '';
+    faces.forEach((face, index) => {
+      const analysis = face.analysis;
+      let details = '';
+      
+      if (analysis) {
+        const parts: string[] = [];
+        if (analysis.age !== undefined) parts.push(`Age: ${analysis.age}`);
+        if (analysis.gender) parts.push(analysis.gender);
+        if (analysis.emotion) parts.push(analysis.emotion);
+        if (analysis.race) parts.push(analysis.race);
+        details = parts.length > 0 ? ` - ${parts.join(', ')}` : '';
+      }
+      
+      html += `
+        <div class="object-item">
+          <span class="object-label">Face ${index + 1}${details}</span>
+          <span class="object-confidence">${(face.confidence * 100).toFixed(1)}%</span>
+        </div>
+      `;
+    });
+
+    this.objectsListEl.innerHTML = html;
+  }
+
   private updateStatus(type: 'loading' | 'ready' | 'error', message: string): void {
     this.statusEl.className = `status ${type}`;
     this.statusEl.textContent = message;
   }
 
   private takeScreenshot(): void {
-    if (!this.isDetecting || this.stats.detectedObjects.length === 0) {
-      alert('Please start detection first and wait for objects to be detected.');
+    if (!this.isDetecting) {
+      alert('Please start detection first.');
+      return;
+    }
+
+    const hasDetections = this.detectionMode === 'object' 
+      ? this.stats.detectedObjects.length > 0
+      : this.faceDetections.length > 0;
+
+    if (!hasDetections) {
+      alert(`Please wait for ${this.detectionMode === 'object' ? 'objects' : 'faces'} to be detected.`);
       return;
     }
 
@@ -231,18 +340,23 @@ class ObjectDetectionApp {
     // Draw video frame
     tempCtx.drawImage(this.video, 0, 0);
     
-    // Draw detections
-    this.renderer.drawDetections(this.stats.detectedObjects);
+    // Draw detections based on mode
+    if (this.detectionMode === 'object') {
+      this.renderer.drawDetections(this.stats.detectedObjects);
+    } else {
+      this.renderer.drawFaceDetections(this.faceDetections);
+    }
     tempCtx.drawImage(this.canvas, 0, 0);
 
     // Convert to blob and download
+    const modePrefix = this.detectionMode === 'object' ? 'object-detection' : 'face-detection';
     tempCanvas.toBlob((blob) => {
       if (!blob) return;
       
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `object-detection-${Date.now()}.png`;
+      a.download = `${modePrefix}-${Date.now()}.png`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -260,6 +374,8 @@ class ObjectDetectionApp {
     }
     
     this.detector.dispose();
+    this.faceDetector.dispose();
+    this.faceAnalyzer.dispose();
   }
 }
 

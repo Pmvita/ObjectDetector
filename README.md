@@ -1,15 +1,27 @@
-# Real-Time Object Detection & Labeling
+# Real-Time Object Detection & Face Recognition
 
-A real-time object detection application that uses your webcam to detect and label objects. Available in both web (TensorFlow.js + COCO-SSD) and Python (YOLO/COCO-SSD) versions.
+A real-time object detection and face recognition application that uses your webcam to detect objects and analyze faces. Available in both web (TensorFlow.js) and Python (YOLO/DeepFace) versions.
 
 ## Features
 
+### Object Detection
 - Real-time object detection from webcam feed
 - Bounding boxes with labels and confidence scores
 - Support for 80 object classes (COCO dataset)
 - FPS monitoring and performance stats
 - Modern, responsive UI (web version)
 - Command-line interface (Python version)
+
+### Face Recognition & Analysis
+- Real-time face detection from webcam
+- Age estimation
+- Gender classification
+- Emotion detection (happy, sad, angry, surprise, fear, neutral, disgust)
+- Race/ethnicity detection
+- Bounding boxes with all detected attributes
+- Optimized for 50-60 FPS with background threading
+- Toggle between object detection and face detection modes (web version)
+- Configurable FPS target and analysis intervals
 
 ## Project Structure
 
@@ -41,7 +53,7 @@ ObjectDetector/
 
 4. Open your browser and navigate to the URL shown (usually `http://localhost:5173`)
 
-5. Allow camera permissions when prompted
+5. Allow camera permissions when prompted - the webcam will start automatically
 
 ### Python Version
 
@@ -67,13 +79,28 @@ ObjectDetector/
 
 4. Run the detector:
    ```bash
+   # For object detection (uses default webcam automatically):
    python3 detector.py
+   
+   # For face detection and analysis (uses default webcam automatically):
+   python3 face_detector_app.py
    ```
    
-   **Note:** The detector will automatically:
-   - Try YOLO first (recommended - downloads model automatically)
-   - Fall back to COCO-SSD if YOLO is not available
-   - Use a simple detector if no ML models are available
+   **Note:** Both applications automatically use your default webcam (camera 0). The webcam will start immediately when you run the application.
+   
+   **Object Detection:**
+   - The detector will automatically:
+     - Try YOLO first (recommended - downloads model automatically)
+     - Fall back to COCO-SSD if YOLO is not available
+     - Use a simple detector if no ML models are available
+   
+   **Face Detection:**
+   - Uses OpenCV DNN face detector (with Haar Cascade fallback)
+   - Analyzes faces using DeepFace (downloads models automatically on first run)
+   - Optimized for 50-60 FPS with background threading for analysis
+   - Analysis runs every 20 frames by default (adjustable with `--analyze-interval`)
+   - Use `--no-analysis` flag for maximum FPS (face detection only)
+   - Configurable target FPS with `--target-fps` option
 
 5. Press `q` to quit, `s` to save a screenshot
 
@@ -82,14 +109,18 @@ ObjectDetector/
 ### Web Version
 - Modern web browser with camera support
 - Node.js 16+ and npm
+- TensorFlow.js models (load automatically)
 
 ### Python Version
 - Python 3.8+
 - Webcam
 - OpenCV, NumPy, and YOLO (Ultralytics) - see `python/requirements.txt`
+- DeepFace and TensorFlow (for face recognition features)
 - Optional: COCO-SSD model files (for fallback)
 
 ## Model Information
+
+### Object Detection Models
 
 **Python Version:**
 - **YOLO (Recommended)**: Uses YOLOv8n - automatically downloads on first use, detects 80 COCO classes
@@ -105,6 +136,21 @@ Both models can detect 80 different object classes including:
 - Electronics (laptop, mouse, keyboard, etc.)
 - Food items (banana, apple, pizza, etc.)
 - And many more...
+
+### Face Recognition Models
+
+**Python Version:**
+- **Face Detection**: OpenCV DNN face detector (with Haar Cascade fallback)
+- **Face Analysis**: DeepFace library with pre-trained models for:
+  - Age estimation (ApparentAge model)
+  - Gender classification (Gender model)
+  - Emotion detection (Ferc2013 model)
+  - Race detection (Race model)
+- Models download automatically on first use
+
+**Web Version:**
+- **Face Detection**: BlazeFace model via TensorFlow.js
+- **Face Analysis**: Simplified analysis (can be extended with additional models)
 
 ## Troubleshooting
 
@@ -147,6 +193,14 @@ Both models can detect 80 different object classes including:
 - Ensure internet connection (model loads from CDN)
 
 ### Performance Issues
+
+**For Face Detection:**
+- Use `--no-analysis` flag for maximum FPS (face detection only, no analysis)
+- Increase `--analyze-interval` (e.g., `--analyze-interval 30`) for better FPS
+- Lower target FPS if CPU can't keep up: `--target-fps 30`
+- Lower resolution: `--width 320 --height 240`
+
+**General:**
 - Lower the video resolution in settings
 - Reduce the frame processing rate
 - Close other applications using the camera

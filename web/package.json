@@ -10,7 +10,8 @@
   },
   "dependencies": {
     "@tensorflow/tfjs": "^4.15.0",
-    "@tensorflow-models/coco-ssd": "^2.2.3"
+    "@tensorflow-models/coco-ssd": "^2.2.3",
+    "@tensorflow-models/blazeface": "^2.0.1"
   },
   "devDependencies": {
     "@types/node": "^20.10.0",

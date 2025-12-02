@@ -28,3 +28,6 @@ export interface Stats {
   detectedObjects: Detection[];
 }
 
+// Face detection types (re-exported from faceTypes for convenience)
+export type { FaceDetection, FaceAnalysis, FaceBoundingBox, FaceDetectionResult } from './faceTypes';
+

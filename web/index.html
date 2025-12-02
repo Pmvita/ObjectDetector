@@ -47,6 +47,12 @@
       font-size: 1.1em;
     }
 
+    .header .subtitle {
+      margin-top: 10px;
+      font-size: 0.9em;
+      opacity: 0.8;
+    }
+
     .content {
       padding: 30px;
     }
@@ -203,8 +209,9 @@
 <body>
   <div class="container">
     <div class="header">
-      <h1>🔍 Real-Time Object Detection</h1>
-      <p>Powered by TensorFlow.js & COCO-SSD</p>
+      <h1>🔍 Real-Time Detection</h1>
+      <p>Object Detection & Face Recognition</p>
+      <p class="subtitle">Powered by TensorFlow.js</p>
     </div>
     <div class="content">
       <div id="status" class="status loading">Loading model...</div>
@@ -217,6 +224,7 @@
       <div class="controls">
         <button id="startBtn" class="btn-primary" disabled>Start Detection</button>
         <button id="stopBtn" class="btn-secondary" disabled>Stop Detection</button>
+        <button id="modeToggleBtn" class="btn-secondary" disabled>Switch to Face Mode</button>
         <button id="screenshotBtn" class="btn-secondary" disabled>Take Screenshot</button>
       </div>
 

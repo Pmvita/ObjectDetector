@@ -1,4 +1,4 @@
-import type { Detection } from './types';
+import type { Detection, FaceDetection } from './types';
 
 export class CanvasRenderer {
   private canvas: HTMLCanvasElement;
@@ -124,6 +124,115 @@ export class CanvasRenderer {
 
   captureScreenshot(): string {
     return this.canvas.toDataURL('image/png');
+  }
+
+  drawFaceDetections(faces: FaceDetection[]): void {
+    this.clear();
+
+    // Filter faces by confidence threshold
+    const filteredFaces = faces.filter(
+      face => face.confidence >= this.confidenceThreshold
+    );
+
+    filteredFaces.forEach(face => {
+      this.drawFaceBoundingBox(face);
+      this.drawFaceLabel(face);
+    });
+  }
+
+  private drawFaceBoundingBox(face: FaceDetection): void {
+    const { bbox, confidence } = face;
+    
+    // Color based on confidence score
+    const color = this.getColorForConfidence(confidence);
+    
+    this.ctx.strokeStyle = color;
+    this.ctx.lineWidth = 3;
+    this.ctx.setLineDash([]);
+    
+    // Draw rectangle
+    this.ctx.strokeRect(bbox.x, bbox.y, bbox.width, bbox.height);
+    
+    // Draw corner markers for better visibility
+    const cornerSize = 10;
+    this.ctx.fillStyle = color;
+    
+    // Top-left corner
+    this.ctx.fillRect(bbox.x - 1, bbox.y - 1, cornerSize, 3);
+    this.ctx.fillRect(bbox.x - 1, bbox.y - 1, 3, cornerSize);
+    
+    // Top-right corner
+    this.ctx.fillRect(bbox.x + bbox.width - cornerSize + 1, bbox.y - 1, cornerSize, 3);
+    this.ctx.fillRect(bbox.x + bbox.width - 2, bbox.y - 1, 3, cornerSize);
+    
+    // Bottom-left corner
+    this.ctx.fillRect(bbox.x - 1, bbox.y + bbox.height - 2, cornerSize, 3);
+    this.ctx.fillRect(bbox.x - 1, bbox.y + bbox.height - cornerSize + 1, 3, cornerSize);
+    
+    // Bottom-right corner
+    this.ctx.fillRect(bbox.x + bbox.width - cornerSize + 1, bbox.y + bbox.height - 2, cornerSize, 3);
+    this.ctx.fillRect(bbox.x + bbox.width - 2, bbox.y + bbox.height - cornerSize + 1, 3, cornerSize);
+  }
+
+  private drawFaceLabel(face: FaceDetection): void {
+    const { bbox, confidence, analysis } = face;
+    
+    const padding = 8;
+    const fontSize = 14;
+    const lineHeight = 18;
+    const fontFamily = 'Arial, sans-serif';
+    
+    this.ctx.font = `bold ${fontSize}px ${fontFamily}`;
+    
+    // Build label lines
+    const labelLines: string[] = [];
+    labelLines.push(`Face ${(confidence * 100).toFixed(1)}%`);
+    
+    if (analysis) {
+      if (analysis.age !== undefined) {
+        labelLines.push(`Age: ${analysis.age}`);
+      }
+      if (analysis.gender) {
+        labelLines.push(`Gender: ${analysis.gender}`);
+      }
+      if (analysis.emotion) {
+        labelLines.push(`Emotion: ${analysis.emotion}`);
+      }
+      if (analysis.race) {
+        labelLines.push(`Race: ${analysis.race}`);
+      }
+    }
+    
+    // Calculate maximum text width
+    let maxWidth = 0;
+    labelLines.forEach(line => {
+      const metrics = this.ctx.measureText(line);
+      maxWidth = Math.max(maxWidth, metrics.width);
+    });
+    
+    const totalHeight = labelLines.length * lineHeight + padding * 2;
+    const labelX = bbox.x;
+    const labelY = bbox.y - 5;
+    
+    // Draw background rectangle for label
+    const bgColor = this.getColorForConfidence(confidence);
+    this.ctx.fillStyle = bgColor;
+    this.ctx.fillRect(
+      labelX - 2,
+      labelY - totalHeight,
+      maxWidth + padding * 2,
+      totalHeight
+    );
+    
+    // Draw text lines
+    this.ctx.fillStyle = '#FFFFFF';
+    labelLines.forEach((line, index) => {
+      this.ctx.fillText(
+        line,
+        labelX + padding - 2,
+        labelY - totalHeight + (index + 1) * lineHeight + padding / 2
+      );
+    });
   }
 }
 
